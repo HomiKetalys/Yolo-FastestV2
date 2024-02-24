@@ -1,9 +1,12 @@
 import os
+import sys
+
 import cv2
 import time
 import argparse
 from torchsummary import summary
 import torch
+
 from model import detector
 from utils import utils
 
