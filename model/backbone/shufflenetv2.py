@@ -291,7 +291,7 @@ class ShuffleNetV2Sp(ShuffleNetV2):
         print("initialize_weights...")
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.load_state_dict(
-            torch.load("./modified_files/Yolo_FastestV2_main/model/backbone/backbone.pth", map_location=device),
+            torch.load("./submodules/Yolo_FastestV2/model/backbone/backbone.pth", map_location=device),
             strict=True)
 
 
