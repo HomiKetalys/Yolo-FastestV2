@@ -39,6 +39,7 @@ def test(cfg_path,model_path,img_path,result_path,eval_type):
     res_img = cv2.resize(ori_img, (cfg["width"], cfg["height"]), interpolation=cv2.INTER_LINEAR)
     img = res_img.reshape(1, cfg["height"], cfg["width"], 3)
     img = torch.from_numpy(img.transpose(0, 3, 1, 2))
+    img[:,:,:]=255
     img = img.to(device).float() / 255.0
 
     # 模型推理

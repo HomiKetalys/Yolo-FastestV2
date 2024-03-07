@@ -71,10 +71,14 @@ class DetectorOrtTf():
             self.model_front = modelRuner(model_front_path)
             self.model_post = modelRuner(model_post_path)
             if model_front_path.endswith(".tflite"):
-                self.fix = self.model_front.model_output_details[0]["quantization"][0] / \
-                           self.model_post.model_input_details["quantization"][0]
-                print(f"\rfix_factor:{self.fix}")
+                std0,mean0=self.model_front.model_output_details[0]["quantization"]
+                std1,mean1=self.model_post.model_input_details["quantization"]
+                self.fix0 = std0/std1
+                self.fix1 = -self.fix0*mean0+mean1
             self.sp = 1
+
+            self.weight,self.bias=self.model_front.model_input_details["quantization"]
+
         else:
             self.model = modelRuner(model_path)
             self.sp = 0
@@ -85,8 +89,11 @@ class DetectorOrtTf():
         pred_list1 = []
         for x in inputs:
             if self.model_type == ".tflite":
-                x = x.permute(1, 2, 0).cpu().numpy() * 255
-                x = x.astype("uint8")
+                x = x.permute(1, 2, 0).cpu().numpy()
+                x = x.astype("float32")
+                x=x/self.weight+self.bias
+                x=np.clip(x,-128,127)
+                x=x.astype("int8")
                 h, w, c = x.shape[:3]
             else:
                 x = x.cpu().numpy()
@@ -109,7 +116,7 @@ class DetectorOrtTf():
                         y[r * h:(r + 1) * h, c * w:(c + 1) * w, :] = y_list[id]
                         id += 1
                 y = y[None, :, :, :].astype('float32')
-                y = (y + 128) * self.fix - 128
+                y = np.clip(y*self.fix0+self.fix1,-128,127)
                 y = y.astype('int8')
                 out = self.model_post(y)
 
