@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import os
-from common_utils.utils import modelRuner
+from common_utils.utils import tfOrtModelRuner
 import numpy as np
 from model.fpn import *
 from model.backbone.shufflenetv2 import *
@@ -68,8 +68,8 @@ class DetectorOrtTf():
         if model_path is None:
             assert os.path.splitext(model_front_path)[-1] == os.path.splitext(model_post_path)[-1]
             self.model_type = os.path.splitext(model_front_path)[-1]
-            self.model_front = modelRuner(model_front_path)
-            self.model_post = modelRuner(model_post_path)
+            self.model_front = tfOrtModelRuner(model_front_path)
+            self.model_post = tfOrtModelRuner(model_post_path)
             if model_front_path.endswith(".tflite"):
                 std0,mean0=self.model_front.model_output_details[0]["quantization"]
                 std1,mean1=self.model_post.model_input_details["quantization"]
@@ -80,9 +80,10 @@ class DetectorOrtTf():
             self.weight,self.bias=self.model_front.model_input_details["quantization"]
 
         else:
-            self.model = modelRuner(model_path)
+            self.model = tfOrtModelRuner(model_path)
             self.sp = 0
             self.model_type = os.path.splitext(model_path)[-1]
+            self.weight, self.bias = self.model.model_input_details["quantization"]
 
     def __call__(self, inputs):
         pred_list0 = []
