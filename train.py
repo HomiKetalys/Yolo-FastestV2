@@ -116,6 +116,7 @@ def train(opt,log_and_save):
     scheduler = optim.lr_scheduler.MultiStepLR(optimizer,
                                                milestones=cfg["steps"],
                                                gamma=0.1)
+    optimizer.zero_grad()
 
     print('Starting training for %g epochs...' % cfg["epochs"])
 
@@ -138,7 +139,6 @@ def train(opt,log_and_save):
 
             # 反向传播求解梯度
             total_loss.backward()
-
             # 学习率预热
             for g in optimizer.param_groups:
                 warmup_num = 5 * len(train_dataloader)
@@ -159,6 +159,7 @@ def train(opt,log_and_save):
             pbar.set_description(info)
 
             batch_num += 1
+
 
         # 模型保存
         if epoch % 10 == 0 and epoch>0:

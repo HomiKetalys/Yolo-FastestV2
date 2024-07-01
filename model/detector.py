@@ -1,3 +1,5 @@
+from functools import partial
+
 import torch
 import torch.nn as nn
 import os
@@ -75,9 +77,10 @@ class DetectorOrtTf():
                 std1,mean1=self.model_post.model_input_details["quantization"]
                 self.fix0 = std0/std1
                 self.fix1 = -self.fix0*mean0+mean1
+                self.weight, self.bias = self.model_front.model_input_details["quantization"]
             self.sp = 1
 
-            self.weight,self.bias=self.model_front.model_input_details["quantization"]
+
 
         else:
             self.model = tfOrtModelRuner(model_path)
@@ -105,22 +108,33 @@ class DetectorOrtTf():
                 y_list = []
                 for r in range(0, self.separation_scale):
                     for c in range(0, self.separation_scale):
-                        x_ = x[None, r * h // self.separation_scale:(r + 1) * h // self.separation_scale,
-                             c * w // self.separation_scale:(c + 1) * w // self.separation_scale, :]
+                        if self.model_type==".tflite":
+                            x_ = x[None, r * h // self.separation_scale:(r + 1) * h // self.separation_scale,
+                                 c * w // self.separation_scale:(c + 1) * w // self.separation_scale, :]
+                        else:
+                            x_ = x[None, :,r * h // self.separation_scale:(r + 1) * h // self.separation_scale,
+                                 c * w // self.separation_scale:(c + 1) * w // self.separation_scale]
                         y = self.model_front(x_)[0]
                         y_list.append(y)
-                h, w, c = y_list[0].shape[:3]
-                y = np.zeros((h * self.separation_scale, w * self.separation_scale, c), dtype="int8")
+                if self.model_type==".tflite":
+                    h, w, c = y_list[0].shape[:3]
+                    y = np.zeros((h * self.separation_scale, w * self.separation_scale, c), dtype="int8")
+                else:
+                    c,h,w = y_list[0].shape[:3]
+                    y = np.zeros((c,h * self.separation_scale, w * self.separation_scale), dtype="float32")
                 id = 0
                 for r in range(0, self.separation_scale):
                     for c in range(0, self.separation_scale):
-                        y[r * h:(r + 1) * h, c * w:(c + 1) * w, :] = y_list[id]
+                        if self.model_type == ".tflite":
+                            y[ r * h:(r + 1) * h, c * w:(c + 1) * w,:] = y_list[id]
+                        else:
+                            y[:,r * h:(r + 1) * h, c * w:(c + 1) * w] = y_list[id]
                         id += 1
                 y = y[None, :, :, :].astype('float32')
-                y = np.clip(y*self.fix0+self.fix1,-128,127)
-                y = y.astype('int8')
+                if self.model_type == ".tflite":
+                    y = np.clip(y*self.fix0+self.fix1,-128,127)
+                    y = y.astype('int8')
                 out = self.model_post(y)
-
             else:
                 out = self.model(x[None, :, :, :])
                 # out = np.concatenate(out,axis=2)
@@ -141,9 +155,7 @@ class DetectorOrtTf():
                 out1 = torch.tensor(out1, device=inputs.device)
             pred_list0.append(out0)
             pred_list1.append(out1)
-        # out0=np.concatenate(pred_list0,axis=0)
         out0 = torch.cat(pred_list0, dim=0)
-        # return out0
         out1 = torch.cat(pred_list1, dim=0)
         return out0[:, :12, :, ], out0[:, 12:15, :, ], out0[:, 15:, :, ], out1[:, :12, :, ], out1[:, 12:15, :, ], out1[
                                                                                                                   :,
@@ -210,11 +222,17 @@ class DetectorSp(Detector):
                     out_obj_3 = out_obj_3.sigmoid()
                     out_cls_3 = F.softmax(out_cls_3, dim=1)
 
-                out_2 = torch.cat((out_reg_2, out_obj_2, out_cls_2), dim=1)
+                if out_cls_2.shape[1]==1:
+                    out_2 = torch.cat((out_reg_2, out_obj_2), dim=1)
+                else:
+                    out_2 = torch.cat((out_reg_2, out_obj_2, out_cls_2), dim=1)
                 bs, ch, h, w = out_2.shape
                 out_2 = torch.reshape(out_2, (bs, ch, h * w))
 
-                out_3 = torch.cat((out_reg_3, out_obj_3, out_cls_3), dim=1)
+                if out_cls_3.shape[1]==1:
+                    out_3 = torch.cat((out_reg_3, out_obj_3), dim=1)
+                else:
+                    out_3 = torch.cat((out_reg_3, out_obj_3, out_cls_3), dim=1)
                 bs, ch, h, w = out_3.shape
                 out_3 = torch.reshape(out_3, (bs, ch, h * w))
                 out = torch.cat((out_2, out_3), dim=2)
@@ -270,6 +288,7 @@ class DetectorSp(Detector):
         # modified
         # self.backbone = ShuffleNetV2(stage_out_channels, load_param)
         self.backbone = ShuffleNetV2Sp(stage_out_channels, load_param, separation, separation_scale)
+        # self.backbone=partial(fastvit_t3(),features=True)
         self.fpn = LightFPN(stage_out_channels[-2] + stage_out_channels[-1], stage_out_channels[-1], out_depth)
 
         self.output_reg_layers = nn.Conv2d(out_depth, 4 * anchor_num, 1, 1, 0, bias=True)
