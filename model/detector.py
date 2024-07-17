@@ -80,8 +80,6 @@ class DetectorOrtTf():
                 self.weight, self.bias = self.model_front.model_input_details["quantization"]
             self.sp = 1
 
-
-
         else:
             self.model = tfOrtModelRuner(model_path)
             self.sp = 0
@@ -157,11 +155,17 @@ class DetectorOrtTf():
             pred_list1.append(out1)
         out0 = torch.cat(pred_list0, dim=0)
         out1 = torch.cat(pred_list1, dim=0)
-        return out0[:, :12, :, ], out0[:, 12:15, :, ], out0[:, 15:, :, ], out1[:, :12, :, ], out1[:, 12:15, :, ], out1[
-                                                                                                                  :,
-                                                                                                                  15:,
-                                                                                                                  :, ]
-
+        bs,ch,h,w=out0.shape
+        if ch==15:
+            out0c=torch.ones((bs,1,h,w),device=inputs.device)
+        else:
+            out0c = out0[:, 15:, :, ]
+        bs,ch,h,w=out1.shape
+        if ch==15:
+            out1c=torch.ones((bs,1,h,w),device=inputs.device)
+        else:
+            out1c = out1[:, 15:, :, ]
+        return out0[:, :12, :, ], out0[:, 12:15, :, ], out0c, out1[:, :12, :, ], out1[:, 12:15, :, ], out1c
 
 class DetectorSp(Detector):
     def __init__(self, classes, anchor_num, load_param, export_onnx=0, separation=False, separation_scale=2,
@@ -266,11 +270,19 @@ class DetectorSp(Detector):
                     out_obj_3 = out_obj_3.sigmoid()
                     out_cls_3 = F.softmax(out_cls_3, dim=1)
 
-                out_2 = torch.cat((out_reg_2, out_obj_2, out_cls_2), dim=1)
+                if out_cls_2.shape[1]==1:
+                    out_2 = torch.cat((out_reg_2, out_obj_2), dim=1)
+                else:
+                    out_2 = torch.cat((out_reg_2, out_obj_2, out_cls_2), dim=1)
                 bs, ch, h, w = out_2.shape
                 out_2 = torch.reshape(out_2, (bs, ch, h * w))
 
-                out_3 = torch.cat((out_reg_3, out_obj_3, out_cls_3), dim=1)
+
+
+                if out_cls_3.shape[1]==1:
+                    out_3 = torch.cat((out_reg_3, out_obj_3), dim=1)
+                else:
+                    out_3 = torch.cat((out_reg_3, out_obj_3, out_cls_3), dim=1)
                 bs, ch, h, w = out_3.shape
                 out_3 = torch.reshape(out_3, (bs, ch, h * w))
                 out = torch.cat((out_2, out_3), dim=2)
