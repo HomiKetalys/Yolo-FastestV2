@@ -28,7 +28,7 @@ def train(opt,log_and_save):
     #                     help='Specify training profile *.data')
     # opt = parser.parse_args()
     # cfg = utils.utils.load_datafile(opt.data)
-    cfg = utils.load_datafile(opt.data)
+    cfg = utils.load_datafile(opt.config)
 
     print("训练配置:")
     print(cfg)
